@@ -231,15 +231,15 @@ class IrcObject:
         self.registry.reset()
 
         to_scan = []
-        for module, categories in scanned:
-            if module in modules:
-                module = utils.maybedotted(module)
-                module = reload_module(module)
-            to_scan.append((module, categories))
+        for module_name, categories in scanned:
+            if module_name in modules:
+                module = utils.maybedotted(module_name)
+                reload_module(module)
+            to_scan.append((module_name, categories))
 
         # rescan all modules
-        for module, categories in to_scan:
-            self.include(module, venusian_categories=categories)
+        for module_name, categories in to_scan:
+            self.include(module_name, venusian_categories=categories)
 
         self.registry.reloading = {}
 
@@ -327,6 +327,8 @@ class IrcObject:
                 port=self.config.port,
                 ssl=self.get_ssl_context()
             )
+            if self.config.get('vhost'):
+                args["local_addr"] = (self.config.vhost, 0)
         t = asyncio.Task(factory(protocol, **args), loop=self.loop)
         t.add_done_callback(self.connection_made)
         return self.loop

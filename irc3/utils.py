@@ -161,6 +161,7 @@ def parse_config(main_section, *filenames):
     filename = os.path.abspath(filename)
     here = os.path.dirname(filename)
     defaults = dict(here=here, hash='#')
+    defaults['#'] = '#'
 
     config = configparser.ConfigParser(
         defaults, allow_no_value=False,
@@ -177,7 +178,7 @@ def parse_config(main_section, *filenames):
                 v = as_list(v)
             elif v.isdigit():
                 v = int(v)
-            elif v.lstrip('.').isdigit():
+            elif v.replace('.', '').isdigit() and v.count('.') == 1:
                 v = float(v)
             elif v in ('true', 'false'):
                 v = v == 'true' and True or False

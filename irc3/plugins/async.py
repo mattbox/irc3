@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from collections import OrderedDict
 from irc3.async import AsyncEvents
 from irc3 import utils
 from irc3 import dec
@@ -126,6 +127,40 @@ class WhoChannel(AsyncEvents):
         return value
 
 
+class WhoChannelFlags(AsyncEvents):
+
+    flags = OrderedDict([
+        ("u", "(?P<user>\S+)"),
+        ("i", "(?P<ip>\S+)"),
+        ("h", "(?P<host>\S+)"),
+        ("s", "(?P<server>\S+)"),
+        ("n", "(?P<nick>\S+)"),
+        ("a", "(?P<account>\S+)"),
+        ("r", ":(?P<realname>.*)"),
+    ])
+
+    send_line = "WHO {channel} c%{flags}"
+
+    events = (
+        {"match": "(?i)^:\S+ (?P<retcode>(315|401)) \S+ {channel} :.*",
+         "final": True},
+    )
+
+    def process_results(self, results=None, **value):
+        users = []
+        for res in results:
+            if 'retcode' in res:
+                value.update(res)
+            else:
+                # Works in QuakeNet, don't know about other networks
+                if res.get('account') == '0':
+                    res['account'] = None
+                users.append(res)
+        value['users'] = users
+        value['success'] = value.get('retcode') == '315'
+        return value
+
+
 class WhoNick(AsyncEvents):
 
     send_line = 'WHO {nick}'
@@ -203,6 +238,52 @@ class Names(AsyncEvents):
         return value
 
 
+class ChannelBans(AsyncEvents):
+
+    send_line = 'MODE {channel} +b'
+
+    events = (
+        {"match": "(?i)^:\S+ 367 \S+ {channel} (?P<mask>\S+) (?P<user>\S+) "
+                  "(?P<timestamp>\d+)",
+         "multi": True},
+        {"match": "(?i)^:\S+ 368 \S+ {channel} :.*",
+         "final": True},
+    )
+
+    def process_results(self, results=None, **value):
+        bans = []
+        for res in results:
+            # TODO: fix event so this one isn't needed
+            if not res:
+                continue
+            res['timestamp'] = int(res['timestamp'])
+            bans.append(res)
+        value['bans'] = bans
+        return value
+
+
+class CTCP(AsyncEvents):
+
+    send_line = 'PRIVMSG {nick} :\x01{ctcp}\x01'
+
+    events = (
+        {"match": "(?i):(?P<mask>\S+) NOTICE \S+ :\x01(?P<ctcp>\S+) "
+                  "(?P<reply>.*)\x01",
+         "final": True},
+        {"match": "(?i)^:\S+ (?P<retcode>486) \S+ :(?P<reply>.*)",
+         "final": True}
+    )
+
+    def process_results(self, results=None, **value):
+        """take results list of all events and return first dict"""
+        for res in results:
+            if 'mask' in res:
+                res['mask'] = utils.IrcString(res['mask'])
+            value['success'] = res.pop('retcode', None) != '486'
+            value.update(res)
+        return value
+
+
 @dec.plugin
 class Async:
     """Asynchronious plugin.
@@ -219,6 +300,29 @@ class Async:
         self.async_topic = Topic(context)
         self.async_ison = IsOn(context)
         self.async_names = Names(context)
+        self.async_channel_bans = ChannelBans(context)
+        self.async_ctcp = CTCP(context)
+
+    def async_who_channel_flags(self, channel, flags, timeout):
+        """
+        Creates and calls a class from WhoChannelFlags with needed match rule
+        for WHO command on channels with flags.
+        """
+        # Lowercase flags and sort based on WhoChannelFlags.flags, otherwise
+        # resulting dict is wrong. Also join flags if it's a sequence.
+        flags = ''.join([f.lower() for f in WhoChannelFlags.flags
+                         if f in flags])
+        regex = [WhoChannelFlags.flags[f] for f in flags]
+        channel = channel.lower()
+        cls = type(
+            WhoChannelFlags.__name__,
+            (WhoChannelFlags,),
+            {"events": WhoChannelFlags.events + (
+                {"match": "(?i)^:\S+ 354 \S+ {0}".format(' '.join(regex)),
+                 "multi": True},
+            )}
+        )
+        return cls(self.context)(channel=channel, flags=flags, timeout=timeout)
 
     @dec.extend
     def whois(self, nick, timeout=20):
@@ -231,16 +335,23 @@ class Async:
         return self.async_whois(nick=nick.lower(), timeout=timeout)
 
     @dec.extend
-    def who(self, target, timeout=20):
+    def who(self, target, flags=None, timeout=20):
         """Send a WHO and return a Future which will contain recieved data:
 
         .. code-block:: py
 
             result = yield from bot.async_cmds.who('gawel')
             result = yield from bot.async_cmds.who('#irc3')
+            result = yield from bot.async_cmds.who('#irc3', 'an')
+            # or
+            result = yield from bot.async_cmds.who('#irc3', ['a', 'n'])
         """
         target = target.lower()
         if target.startswith('#'):
+            if flags:
+                return self.async_who_channel_flags(channel=target,
+                                                    flags=flags,
+                                                    timeout=timeout)
             return self.async_who_channel(channel=target, timeout=timeout)
         else:
             return self.async_who_nick(nick=target, timeout=timeout)
@@ -274,3 +385,22 @@ class Async:
             result = yield from bot.async_cmds.names('#irc3')
         """
         return self.async_names(channel=channel.lower(), timeout=timeout)
+
+    @dec.extend
+    def channel_bans(self, channel, timeout=20):
+        """Send a MODE +b and return a Future which will contain recieved data:
+        .. code-block:: py
+            result = yield from bot.async_cmds.channel_bans('#irc3')
+        """
+        return self.async_channel_bans(channel=channel.lower(),
+                                       timeout=timeout)
+
+    @dec.extend
+    def ctcp_async(self, nick, ctcp, timeout=20):
+        """Send a CTCP and return a Future which will contain recieved data:
+
+        .. code-block:: py
+
+            result = yield from bot.async_cmds.ctcp('irc3', 'version')
+        """
+        return self.async_ctcp(nick=nick, ctcp=ctcp.upper(), timeout=timeout)
