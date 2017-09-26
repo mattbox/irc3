@@ -227,7 +227,8 @@ class TestCommands(BotTestCase):
     def test_invalid_arguments_shlex(self):
         bot = self.callFTU(nick='nono')
         bot.dispatch(':bar!user@host PRIVMSG nono :!ping "xx')
-        self.assertSent(['PRIVMSG bar :Invalid arguments: No closing quotation.'])
+        self.assertSent(
+            ['PRIVMSG bar :Invalid arguments: No closing quotation.'])
 
     def test_command_case_insensitive(self):
         bot = self.callFTU(nick='nono')
