@@ -160,6 +160,18 @@ class TestCommands(BotTestCase):
         bot.dispatch(':bar!user@host PRIVMSG foo :!cmd_arg   "test test" ')
         self.assertSent(['PRIVMSG bar :Done'])
 
+    def test_command_argument_quiet(self):
+        bot = self.callFTU(nick='nono')
+        bot.include(__name__)
+        bot.dispatch(':bar!user@host PRIVMSG #chan :!cmd xx')
+        self.assertNothingSent()
+
+    def test_command_argument_quiet_shlex(self):
+        bot = self.callFTU(nick='nono')
+        bot.include(__name__)
+        bot.dispatch(':bar!user@host PRIVMSG #chan :!ping "test')
+        self.assertNothingSent()
+
     def test_private_command(self):
         bot = self.callFTU()
         bot.dispatch(':bar!user@host PRIVMSG nono :!ping')
@@ -212,11 +224,10 @@ class TestCommands(BotTestCase):
         bot.dispatch(':bar!user@host PRIVMSG nono :!ping xx')
         self.assertSent(['PRIVMSG bar :Invalid arguments.'])
 
-    def test_invalid_arguments_hides(self):
+    def test_invalid_arguments_shlex(self):
         bot = self.callFTU(nick='nono')
-        bot.include(__name__)
-        bot.dispatch(':bar!user@host PRIVMSG #chan :!cmd xx')
-        self.assertNothingSent()
+        bot.dispatch(':bar!user@host PRIVMSG nono :!cmd_arg "xx')
+        self.assertSent(['PRIVMSG bar :Invalid arguments: No closing quotation.'])
 
     def test_command_case_insensitive(self):
         bot = self.callFTU(nick='nono')
