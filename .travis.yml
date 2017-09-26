@@ -4,7 +4,7 @@ sudo: false
 services:
   - redis-server
 install:
-  - pip install tox coveralls
+  - pip install tox-travis coveralls
 script:
   - tox
 after_success:
