@@ -33,7 +33,7 @@ def cmd_view(bot, *args):
     return 'Done'
 
 
-@command.command
+@command.command(quiet=True)
 def cmd_arg(bot, *args):
     """test command
 
@@ -169,7 +169,7 @@ class TestCommands(BotTestCase):
     def test_command_argument_quiet_shlex(self):
         bot = self.callFTU(nick='nono')
         bot.include(__name__)
-        bot.dispatch(':bar!user@host PRIVMSG #chan :!ping "test')
+        bot.dispatch(':bar!user@host PRIVMSG #chan :!cmd_arg "test')
         self.assertNothingSent()
 
     def test_private_command(self):
@@ -226,7 +226,7 @@ class TestCommands(BotTestCase):
 
     def test_invalid_arguments_shlex(self):
         bot = self.callFTU(nick='nono')
-        bot.dispatch(':bar!user@host PRIVMSG nono :!cmd_arg "xx')
+        bot.dispatch(':bar!user@host PRIVMSG nono :!ping "xx')
         self.assertSent(['PRIVMSG bar :Invalid arguments: No closing quotation.'])
 
     def test_command_case_insensitive(self):
