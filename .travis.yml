@@ -13,6 +13,6 @@ script:
   - tox
 after_success:
   - coveralls
-env;
+env:
   - TOXENV=flake8
   - TOXENV=docs
